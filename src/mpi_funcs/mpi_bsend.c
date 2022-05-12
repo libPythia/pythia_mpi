@@ -20,12 +20,17 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static void MPI_Bsend_prolog(CONST void* buf MAYBE_UNUSED,
                              int count MAYBE_UNUSED,
                              MPI_Datatype datatype MAYBE_UNUSED,
                              int dest MAYBE_UNUSED,
                              int tag MAYBE_UNUSED,
                              MPI_Comm comm MAYBE_UNUSED) {
+    int size;
+    MPI_Type_size(datatype, &size);
+    pythia_event(PythiaBsend, dest, count * size, 0);
 }
 
 static int MPI_Bsend_core(CONST void* buf, int count, MPI_Datatype datatype,

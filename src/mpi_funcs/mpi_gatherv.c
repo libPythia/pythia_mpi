@@ -20,6 +20,8 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static void MPI_Gatherv_prolog(CONST void* sendbuf  MAYBE_UNUSED,
                                int sendcnt MAYBE_UNUSED,
                                MPI_Datatype sendtype MAYBE_UNUSED,
@@ -29,7 +31,7 @@ static void MPI_Gatherv_prolog(CONST void* sendbuf  MAYBE_UNUSED,
                                MPI_Datatype recvtype MAYBE_UNUSED,
                                int root MAYBE_UNUSED,
                                MPI_Comm comm MAYBE_UNUSED) {
-
+    pythia_event(PythiaGatherv, root, 0, 0);
 }
 
 static int MPI_Gatherv_core(CONST void* sendbuf,

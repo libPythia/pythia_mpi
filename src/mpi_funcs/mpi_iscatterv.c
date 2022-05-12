@@ -20,6 +20,8 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 #ifdef USE_MPI3
 
 static void MPI_Iscatterv_prolog(CONST void* sendbuf  MAYBE_UNUSED,
@@ -32,7 +34,9 @@ static void MPI_Iscatterv_prolog(CONST void* sendbuf  MAYBE_UNUSED,
                                  int root MAYBE_UNUSED,
                                  MPI_Comm comm MAYBE_UNUSED,
                                  MPI_Request* r MAYBE_UNUSED) {
-
+    int recvsize;
+    MPI_Type_size(recvtype, &recvsize);
+    pythia_event(PythiaIscatterv, root, recvcnt * recvsize, 0);
 }
 
 static int MPI_Iscatterv_core(CONST void* sendbuf,

@@ -20,10 +20,13 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static int MPI_Testall_core(int count,
 			    MPI_Request* reqs,
 			    int* flag,
                             MPI_Status* s) {
+  pythia_event(PythiaTestall, count, 0, 0);
   return libMPI_Testall(count, reqs, flag, s);
 }
 

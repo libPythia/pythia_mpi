@@ -20,6 +20,8 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static void MPI_Get_prolog(void* origin_addr  MAYBE_UNUSED,
                            int origin_count  MAYBE_UNUSED,
                            MPI_Datatype origin_datatype  MAYBE_UNUSED,
@@ -28,7 +30,9 @@ static void MPI_Get_prolog(void* origin_addr  MAYBE_UNUSED,
                            int target_count  MAYBE_UNUSED,
                            MPI_Datatype target_datatype  MAYBE_UNUSED,
                            MPI_Win win MAYBE_UNUSED) {
-
+    int target_size;
+    MPI_Type_size(target_datatype, &target_size);
+    pythia_event(PythiaGet, target_rank, target_count * target_size, 0);
 }
 
 static int MPI_Get_core(void* origin_addr,

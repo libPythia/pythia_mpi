@@ -20,6 +20,8 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 /* todo: implement this function ! */
 
 static void MPI_Waitsome_prolog(int incount MAYBE_UNUSED,
@@ -28,6 +30,7 @@ static void MPI_Waitsome_prolog(int incount MAYBE_UNUSED,
 				int* array_of_indices MAYBE_UNUSED,
 				MPI_Status* array_of_statuses MAYBE_UNUSED,
 				size_t size MAYBE_UNUSED) {
+    pythia_event(PythiaWaitsome, incount, *outcount, 0);
 }
 
 static int MPI_Waitsome_core(int incount,

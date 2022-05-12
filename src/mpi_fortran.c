@@ -7,6 +7,8 @@
 #include "mpii.h"
 #include <mpi.h>
 
+#include "pythia.h"
+
 /* For MPI_Init and MPI_Init_thread, we *have* to call the Fortran version
  * of the function. Once it is done, we can call the __mpi_init_generic function
  */
@@ -24,6 +26,7 @@ void mpif_init_thread_(int* r, int* p, int* error) {
 
 /* For all the remaining Fortran functions, we can just call the C version */
 void mpif_finalize_(int* error) {
+  pythia_deinit();
   *error = MPI_Finalize();
 }
 

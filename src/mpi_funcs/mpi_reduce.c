@@ -20,6 +20,8 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static void MPI_Reduce_prolog(CONST void* sendbuf  MAYBE_UNUSED,
                               void* recvbuf  MAYBE_UNUSED,
                               int count  MAYBE_UNUSED,
@@ -27,6 +29,9 @@ static void MPI_Reduce_prolog(CONST void* sendbuf  MAYBE_UNUSED,
                               MPI_Op op  MAYBE_UNUSED,
                               int root MAYBE_UNUSED,
                               MPI_Comm comm MAYBE_UNUSED) {
+    int size;
+    MPI_Type_size(datatype, &size);
+    pythia_event(PythiaReduce, root, op, count * size);
 }
 
 static int MPI_Reduce_core(CONST void* sendbuf,

@@ -20,13 +20,17 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static void MPI_Scan_prolog(CONST void* sendbuf  MAYBE_UNUSED,
                             void* recvbuf  MAYBE_UNUSED,
                             int count  MAYBE_UNUSED,
                             MPI_Datatype datatype MAYBE_UNUSED,
                             MPI_Op op  MAYBE_UNUSED,
                             MPI_Comm comm MAYBE_UNUSED) {
-
+    int size;
+    MPI_Type_size(datatype, &size);
+    pythia_event(PythiaScan, op, count * size, 0);
 }
 
 static int MPI_Scan_core(CONST void* sendbuf,

@@ -20,11 +20,13 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static void MPI_Waitall_prolog(int count MAYBE_UNUSED,
 			       void* req MAYBE_UNUSED,
                                MPI_Status* s  MAYBE_UNUSED,
                                size_t size MAYBE_UNUSED) {
-
+    pythia_event(PythiaWaitall, count, 0, 0);
 }
 
 static int MPI_Waitall_core(int count,

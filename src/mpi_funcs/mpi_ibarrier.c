@@ -20,10 +20,13 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 #ifdef USE_MPI3
 
 static void MPI_Ibarrier_prolog(MPI_Comm comm MAYBE_UNUSED,
 				MPI_Fint* r MAYBE_UNUSED) {
+    pythia_event(PythiaIbarrier, 0, 0, 0);
 }
 
 static int MPI_Ibarrier_core(MPI_Comm c, MPI_Request* r) {

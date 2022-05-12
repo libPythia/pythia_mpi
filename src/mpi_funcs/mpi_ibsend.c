@@ -20,6 +20,8 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static void MPI_Ibsend_prolog(CONST void* buf  MAYBE_UNUSED,
                               int count MAYBE_UNUSED,
                               MPI_Datatype datatype MAYBE_UNUSED,
@@ -27,6 +29,9 @@ static void MPI_Ibsend_prolog(CONST void* buf  MAYBE_UNUSED,
                               int tag MAYBE_UNUSED,
                               MPI_Comm comm MAYBE_UNUSED,
                               MPI_Fint* req MAYBE_UNUSED) {
+    int size;
+    MPI_Type_size(datatype, &size);
+    pythia_event(PythiaIbsend, dest, tag, count * size);
 }
 
 static int MPI_Ibsend_core(CONST void* buf,

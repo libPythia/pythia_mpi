@@ -20,8 +20,10 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
-static void MPI_Start_prolog(MPI_Fint* req MAYBE_UNUSED) {
+#include "../pythia.h"
 
+static void MPI_Start_prolog(MPI_Fint* req MAYBE_UNUSED) {
+    pythia_event(PythiaStart, 0, 0, 0);
 }
 
 static int MPI_Start_core(MPI_Request* req) {

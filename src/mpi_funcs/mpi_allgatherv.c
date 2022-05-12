@@ -20,6 +20,8 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static void MPI_Allgatherv_prolog(CONST void* sendbuf MAYBE_UNUSED,
                                   int sendcount MAYBE_UNUSED,
                                   MPI_Datatype sendtype MAYBE_UNUSED,
@@ -28,7 +30,7 @@ static void MPI_Allgatherv_prolog(CONST void* sendbuf MAYBE_UNUSED,
                                   CONST int* displs MAYBE_UNUSED,
                                   MPI_Datatype recvtype MAYBE_UNUSED,
                                   MPI_Comm comm MAYBE_UNUSED) {
-
+    pythia_event(PythiaAllgatherv, 0, 0, 0);
 }
 
 static int MPI_Allgatherv_core(CONST void* sendbuf,

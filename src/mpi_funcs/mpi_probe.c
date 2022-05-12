@@ -20,11 +20,13 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static void MPI_Probe_prolog(int source  MAYBE_UNUSED,
                              int tag  MAYBE_UNUSED,
                              MPI_Comm comm  MAYBE_UNUSED,
                              MPI_Status* status MAYBE_UNUSED ) {
-
+    pythia_event(PythiaProbe, 0, 0, 0);
 }
 
 static int MPI_Probe_core(int source,

@@ -20,12 +20,17 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static void MPI_Reduce_scatter_prolog(CONST void* sendbuf  MAYBE_UNUSED,
                                       void* recvbuf  MAYBE_UNUSED,
                                       CONST int* recvcnts  MAYBE_UNUSED,
                                       MPI_Datatype datatype MAYBE_UNUSED,
                                       MPI_Op op  MAYBE_UNUSED,
                                       MPI_Comm comm MAYBE_UNUSED) {
+    int size;
+    MPI_Type_size(datatype, &size);
+    pythia_event(PythiaReduce_scatter, op, recvcnts, size);
 }
 
 static int MPI_Reduce_scatter_core(CONST void* sendbuf,

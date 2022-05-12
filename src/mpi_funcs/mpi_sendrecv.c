@@ -20,6 +20,8 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static void MPI_Sendrecv_prolog(CONST void* sendbuf  MAYBE_UNUSED,
                                 int sendcount MAYBE_UNUSED,
                                 MPI_Datatype sendtype MAYBE_UNUSED,
@@ -32,7 +34,9 @@ static void MPI_Sendrecv_prolog(CONST void* sendbuf  MAYBE_UNUSED,
                                 int recvtag MAYBE_UNUSED,
                                 MPI_Comm comm MAYBE_UNUSED,
                                 MPI_Status* status MAYBE_UNUSED) {
-
+    int size;
+    MPI_Type_size(sendtype, &size);
+    pythia_event(PythiaSendrecv, dest, sendtag, sendcount * size);
 }
 
 static int MPI_Sendrecv_core(CONST void* sendbuf,

@@ -20,6 +20,8 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 #ifdef USE_MPI3
 
 static void MPI_Iscatter_prolog(CONST void* sendbuf  MAYBE_UNUSED,
@@ -31,6 +33,9 @@ static void MPI_Iscatter_prolog(CONST void* sendbuf  MAYBE_UNUSED,
                                 int root MAYBE_UNUSED,
                                 MPI_Comm comm MAYBE_UNUSED,
                                 MPI_Request* r MAYBE_UNUSED) {
+    int recvsize;
+    MPI_Type_size(recvtype, &recvsize);
+    pythia_event(PythiaIscatter, root, recvcnt * recvsize, 0);
 }
 
 static int MPI_Iscatter_core(CONST void* sendbuf,

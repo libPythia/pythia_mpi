@@ -20,6 +20,8 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 #ifdef USE_MPI3
 
 static void MPI_Ibcast_prolog(void* buffer  MAYBE_UNUSED,
@@ -28,7 +30,7 @@ static void MPI_Ibcast_prolog(void* buffer  MAYBE_UNUSED,
                               int root MAYBE_UNUSED,
                               MPI_Comm comm MAYBE_UNUSED,
                               MPI_Request* r MAYBE_UNUSED) {
-
+    pythia_event(PythiaIbcast, root, 0, 0);
 }
 
 static int MPI_Ibcast_core(void* buffer,

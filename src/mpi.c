@@ -22,6 +22,8 @@
 
 #include <mpi.h>
 
+#include "pythia.h"
+
 struct mpii_info mpii_infos; /* information on the local process */
 
 /* pointers to actual MPI functions (C version)  */
@@ -405,6 +407,7 @@ int MPI_Type_size(MPI_Datatype datatype, int* size) {
 
 int MPI_Finalize() {
   FUNCTION_ENTRY;
+  pythia_deinit();
   int ret = libMPI_Finalize();
   FUNCTION_EXIT;
   return ret;
@@ -429,6 +432,8 @@ void __mpi_init_generic() {
   mpii_infos.mpi_comm_self = MPI_COMM_SELF;
 
   __mpi_init_called = 1;
+
+  pythia_init(mpii_infos.rank);
 }
 
 
@@ -443,6 +448,7 @@ int MPI_Init(int* argc, char*** argv) {
   INSTRUMENT_ALL_FUNCTIONS();
   int ret = libMPI_Init(argc, argv);
   __mpi_init_generic();
+
   return ret;
 }
 int MPI_Comm_disconnect(MPI_Comm* comm) {

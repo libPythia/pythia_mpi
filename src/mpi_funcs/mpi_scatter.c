@@ -20,6 +20,8 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static void MPI_Scatter_prolog(CONST void* sendbuf  MAYBE_UNUSED,
                                int sendcnt MAYBE_UNUSED,
                                MPI_Datatype sendtype MAYBE_UNUSED,
@@ -28,6 +30,9 @@ static void MPI_Scatter_prolog(CONST void* sendbuf  MAYBE_UNUSED,
                                MPI_Datatype recvtype MAYBE_UNUSED,
                                int root MAYBE_UNUSED,
                                MPI_Comm comm MAYBE_UNUSED) {
+    int recvsize;
+    MPI_Type_size(recvtype, &recvsize);
+    pythia_event(PythiaScatter, root, recvcnt * recvsize, 0);
 }
 
 static int MPI_Scatter_core(CONST void* sendbuf,

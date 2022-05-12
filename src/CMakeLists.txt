@@ -12,6 +12,15 @@ target_include_directories(mpi-interceptor-bin
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+add_library(mpi_pythia SHARED
+  pythia.cpp
+)
+
+target_link_libraries(mpi_pythia
+  PRIVATE
+    ${MPI_CXX_LIBRARIES}
+)
+
 add_library(mpi-interceptor SHARED
   ${mpi_function_files}
   mpi.c
@@ -31,6 +40,7 @@ target_link_libraries(mpi-interceptor
   PUBLIC
   dl
   PRIVATE
+    mpi_pythia
     ${MPI_Fortran_LIBRARIES}
     ${MPI_C_LIBRARIES}
 )
@@ -53,6 +63,10 @@ install(TARGETS mpi-interceptor
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
   INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(TARGETS mpi_pythia
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
 set_target_properties(mpi-interceptor-bin

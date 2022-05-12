@@ -20,6 +20,8 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static void MPI_Recv_prolog(void* buf  MAYBE_UNUSED,
 			    int count MAYBE_UNUSED,
 			    MPI_Datatype datatype MAYBE_UNUSED,
@@ -27,7 +29,9 @@ static void MPI_Recv_prolog(void* buf  MAYBE_UNUSED,
 			    int tag MAYBE_UNUSED,
                             MPI_Comm comm MAYBE_UNUSED,
                             MPI_Status* status MAYBE_UNUSED ) {
-
+    int size;
+    MPI_Type_size(datatype, &size);
+    pythia_event(PythiaRecv, source, tag, count * size);
 }
 
 static int MPI_Recv_core(void* buf,

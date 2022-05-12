@@ -20,11 +20,14 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static void MPI_Waitany_prolog(int count MAYBE_UNUSED,
 			       void* reqs MAYBE_UNUSED,
                                int* index  MAYBE_UNUSED,
                                MPI_Status* status  MAYBE_UNUSED,
                                size_t size MAYBE_UNUSED) {
+    pythia_event(PythiaWaitany, count, 0, 0);
 }
 
 static int MPI_Waitany_core(int count,

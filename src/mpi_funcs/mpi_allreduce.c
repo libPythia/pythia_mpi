@@ -20,12 +20,15 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static void MPI_Allreduce_prolog(CONST void* sendbuf MAYBE_UNUSED,
                                  void* recvbuf  MAYBE_UNUSED,
                                  int count  MAYBE_UNUSED,
                                  MPI_Datatype datatype  MAYBE_UNUSED,
                                  MPI_Op op  MAYBE_UNUSED,
                                  MPI_Comm comm  MAYBE_UNUSED) {
+    pythia_event(PythiaAllreduce, 0, 0, 0);
 }
 
 static int MPI_Allreduce_core(CONST void* sendbuf, void* recvbuf, int count,

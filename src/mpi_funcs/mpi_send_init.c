@@ -20,6 +20,8 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static int MPI_Send_init_core(CONST void* buffer,
 			      int count,
 			      MPI_Datatype type,

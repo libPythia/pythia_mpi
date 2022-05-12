@@ -20,9 +20,12 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static void MPI_Startall_prolog(int count MAYBE_UNUSED,
 				void* req MAYBE_UNUSED,
 				size_t size MAYBE_UNUSED) {
+    pythia_event(PythiaStartall, count, 0, 0);
 }
 
 static int MPI_Startall_core(int count,

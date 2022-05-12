@@ -20,6 +20,8 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 #ifdef USE_MPI3
 
 static void MPI_Iallreduce_prolog(CONST void* sendbuf  MAYBE_UNUSED,
@@ -29,7 +31,7 @@ static void MPI_Iallreduce_prolog(CONST void* sendbuf  MAYBE_UNUSED,
                                   MPI_Op op  MAYBE_UNUSED,
                                   MPI_Comm comm MAYBE_UNUSED,
                                   MPI_Request* r MAYBE_UNUSED) {
-
+    pythia_event(PythiaIallreduce, 0, 0, 0);
 }
 
 static int MPI_Iallreduce_core(CONST void* sendbuf,

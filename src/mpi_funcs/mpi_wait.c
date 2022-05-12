@@ -20,9 +20,11 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static void MPI_Wait_prolog(MPI_Fint* req MAYBE_UNUSED,
                             MPI_Status* s MAYBE_UNUSED) {
-
+    pythia_event(PythiaWait, 0, 0, 0);
 }
 
 static int MPI_Wait_core(MPI_Request* req, MPI_Status* s) {

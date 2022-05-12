@@ -20,7 +20,10 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
+#include "../pythia.h"
+
 static void MPI_Barrier_prolog(MPI_Comm c MAYBE_UNUSED) {
+    pythia_event(PythiaBarrier, 0, 0, 0);
 }
 
 static int MPI_Barrier_core(MPI_Comm c) {
