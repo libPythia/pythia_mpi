@@ -2,75 +2,26 @@
 
 #include <stdlib.h>
 
+#include <iostream>
 #include <array>
+#include <list>
 #include <atomic>
 #include <cassert>
 #include <cstdio>
 #include <cstring>
 #include <eta/factorization/bin_file.hpp>
 #include <eta/factorization/reduction.hpp>
+#include <eta/factorization/prediction.hpp>
 #include <fstream>
 #include <iostream>
 #include <tuple>
 #include <unordered_map>
 
 
-#define AUX(x) case Pythia##x: return "MPI_" #x
+#define AUX(x, y) case Pythia##x: return "MPI_" #x;
 inline auto pythia_MPI_fn_name(Pythia_MPI_fn fn) {
     switch (fn) {
-	    AUX(Allgather);
-	    AUX(Allgatherv);
-	    AUX(Allreduce);
-	    AUX(Alltoall);
-	    AUX(Alltoallv);
-	    AUX(Barrier);
-	    AUX(Bcast);
-	    AUX(Bsend);
-	    AUX(Gather);
-	    AUX(Gatherv);
-	    AUX(Get);
-	    AUX(Iallgather );
-	    AUX(Iallgatherv);
-	    AUX(Iallreduce);
-	    AUX(Ialltoall);
-	    AUX(Ialltoallv);
-	    AUX(Ibarrier);
-	    AUX(Ibcast);
-	    AUX(Ibsend);
-	    AUX(Igather);
-	    AUX(Igatherv);
-	    AUX(Irecv);
-	    AUX(Ireduce);
-	    AUX(Ireduce_scatter);
-	    AUX(Irsend);
-	    AUX(Iscan);
-	    AUX(Iscatter);
-	    AUX(Iscatterv);
-	    AUX(Isend);
-	    AUX(Issend);
-	    AUX(Probe);
-	    AUX(Put);
-	    AUX(Recv);
-	    AUX(Reduce);
-	    AUX(Reduce_scatter);
-	    AUX(Rsend);
-	    AUX(Scan);
-	    AUX(Scatter);
-	    AUX(Scatterv);
-	    AUX(Send);
-	    AUX(Sendrecv);
-	    AUX(Sendrecv_replace);
-	    AUX(Ssend);
-	    AUX(Startall);
-	    AUX(Start);
-	    AUX(Testall);
-	    AUX(Testany);
-	    AUX(Test);
-	    AUX(Testsome);
-	    AUX(Waitall);
-	    AUX(Waitany);
-	    AUX(Wait);
-	    AUX(Waitsome);
+#include "pythia_fn.inl"
         default: return "UNKNOWN";
     }
 }
@@ -89,15 +40,32 @@ struct Payload {
     int arg3;
 };
 
+
+struct PredictionTest {
+    size_t event_id;
+    Payload const * payload;
+};
+
 struct Data {
     struct Event {
         std::unordered_map<std::tuple<int, int, int>, Terminal *, tuple_hash> terminals;
     };
     std::array<Event, (int)Pythia_MPI_fn::COUNT - 1> events;
 
+    size_t event_id = 0;
+    size_t world_rank;
+
     std::atomic_int recursion_count = 1;
     bool is_recording = true;
     bool log = false;
+
+    int prediction_advance = 1;
+    bool log_prediction = false;
+    Estimation estimation;
+    std::list<PredictionTest> prediction_test;
+    size_t prediction_success_count = 0u;
+    size_t prediction_failure_count = 0u;
+    size_t no_prediction_count = 0u;
 
     Grammar grammar;
     NonTerminal * root = nullptr;
@@ -112,29 +80,108 @@ static auto get_data() -> Data * {
 
 // -------------------------------------------------------------
 
+enum class ActionOnEvent {
+    do_nothing,
+    trigger_prediction,
+};
+
+static auto trigger_prediction(Pythia_MPI_fn fn) -> bool {
+#define AUX(x, y) case Pythia_MPI_fn::Pythia##x: return ActionOnEvent::y == ActionOnEvent::trigger_prediction;
+    switch (fn) {
+#include "pythia_fn.inl"
+        default: assert(false);
+    }
+#undef AUX
+}
+
+auto operator==(Payload const & lhs, Payload const & rhs) -> bool {
+    return lhs.fn == rhs.fn &&
+        lhs.arg1 == rhs.arg1 &&
+        lhs.arg2 == rhs.arg2 &&
+        lhs.arg3 == rhs.arg3;
+}
+
+static auto record_event(Pythia_MPI_fn fn, Terminal * terminal) -> void {
+    auto const data = get_data();
+
+    ++data->event_id;
+
+    if (data->is_recording) {
+        data->root = insertSymbol(data->grammar, data->root, terminal);
+    } else {
+        data->estimation = next_estimation(std::move(data->estimation), terminal);
+
+        if (trigger_prediction(fn)) {
+            auto prediction = get_prediction_from_estimation(data->estimation);
+            if (prediction.infos.size() == 0) {
+                ++data->no_prediction_count;
+            } else {
+                auto i = 1;
+
+                for (auto i = 1; i < data->prediction_advance; ++i) {
+                    if (get_first_next(&prediction) == 0) {
+                        i = 0;
+                        break;
+                    }
+                }
+
+                if (i != data->prediction_advance) {
+                    ++data->no_prediction_count;
+                } else {
+                    auto const predicted_event = (Payload const *)get_terminal(prediction)->payload;
+                    data->prediction_test.push_back({ data->event_id + data->prediction_advance,
+                            predicted_event });
+                }
+            }
+        }
+
+        if (data->prediction_test.size() > 0) {
+            auto const prediction = data->prediction_test.front();
+            if (prediction.event_id == data->event_id) {
+                if (terminal == nullptr) {
+                    ++data->prediction_failure_count;
+                    printf("%lu: NULLPTR\n", data->world_rank);
+                } else {
+                    auto const payload = (Payload const *)terminal->payload;
+                    if (*prediction.payload == *payload) {
+                        ++data->prediction_success_count;
+                        printf("%lu: OUAIS\n", data->world_rank);
+                    } else {
+                        ++data->prediction_failure_count;
+                        std::cout << data->world_rank
+                                  << ": RATE : "
+                                  << pythia_MPI_fn_name(prediction.payload->fn)
+                                  << " expected, got "
+                                  << pythia_MPI_fn_name(payload->fn)
+                                  << std::endl;
+                    }
+                }
+                data->prediction_test.pop_front();
+            }
+        }
+    }
+}
+
 extern "C" {
 
 auto pythia_event(Pythia_MPI_fn fn, int arg1, int arg2, int arg3) -> void {
-    if (++get_data()->recursion_count == 1) {
-        if (get_data()->log)
-            fprintf(stdout, "Pythia raised event %s with args %d, %d, %d\n", pythia_MPI_fn_name(fn), arg1, arg2, arg3);
+    auto const data = get_data();
+    if (++data->recursion_count == 1) {
+        if (data->log)
+            fprintf(stdout, "%lu: Pythia raised event %s with args %d, %d, %d\n", data->world_rank, pythia_MPI_fn_name(fn), arg1, arg2, arg3);
 
         auto const terminal = [&]() -> Terminal * {
             auto const [it, inserted] =
-                    get_data()->events[(int)fn].terminals.try_emplace({ arg1, arg2, arg3 }, nullptr);
-            if (inserted && get_data()->is_recording) {
-                it->second = new_terminal(get_data()->grammar, new Payload { fn, arg1, arg2, arg3 });
+                    data->events[(int)fn].terminals.try_emplace({ arg1, arg2, arg3 }, nullptr);
+            if (inserted && data->is_recording) {
+                it->second = new_terminal(data->grammar, new Payload { fn, arg1, arg2, arg3 });
             }
             return it->second;
         }();
 
-        if (get_data()->is_recording) {
-            get_data()->root = insertSymbol(get_data()->grammar, get_data()->root, terminal);
-        } else {
-            assert(false);
-        }
+        record_event(fn, terminal);
     }
-    --get_data()->recursion_count;
+    --data->recursion_count;
 }
 
 // -------------------------------------------------------------
@@ -156,42 +203,67 @@ static auto deserialize(std::istream & is, size_t size) -> void * {
 }
 
 auto pythia_init(int world_rank) -> void {
-    sprintf(get_data()->file_name, "pythia_MPI_%d.btr", world_rank);
+    auto const data = get_data();
+    data->world_rank = world_rank;
+
+    sprintf(data->file_name, "pythia_MPI_%d.btr", world_rank);
 
     auto const log_env = getenv("PYTHIA_MPI_LOG");
-    get_data()->log = (log_env != nullptr && strcmp(log_env, "YES") == 0);
+    data->log = (log_env != nullptr && strcmp(log_env, "YES") == 0);
 
     auto const mode_env = getenv("PYTHIA_MPI");
-    get_data()->is_recording = mode_env == nullptr || strcmp(mode_env, "Predict") != 0;
-    if (get_data()->log)
-        fprintf(stdout, get_data()->is_recording ? "Pythia MPI recording\n" : "Pythia MPI predicting\n");
+    data->is_recording = mode_env == nullptr || strcmp(mode_env, "Predict") != 0;
+    if (data->log)
+        fprintf(stdout, data->is_recording ? "Pythia MPI recording\n" : "Pythia MPI predicting\n");
 
-    if (get_data()->is_recording == false) {
-        auto file = std::ifstream { get_data()->file_name };
-        if (get_data()->log)
-            fprintf(stdout, "Load trace from file %s\n", get_data()->file_name);
-        load_bin_file(get_data()->grammar, file, deserialize);
+    if (data->is_recording == false) {
+        auto file = std::ifstream { data->file_name };
+        if (data->log)
+            fprintf(stdout, "Load trace from file %s\n", data->file_name);
+        load_bin_file(data->grammar, file, deserialize);
 
-        for (auto & terminal : get_data()->grammar.terminals) {
+        for (auto & terminal : data->grammar.terminals) {
             auto const p = (Payload const *)terminal->payload;
-            get_data()->events[(int)p->fn].terminals[{ p->arg1, p->arg2, p->arg3}] = terminal.get();
+            data->events[(int)p->fn].terminals[{ p->arg1, p->arg2, p->arg3}] = terminal.get();
         }
+
+        auto const advance_env = getenv("PYTHIA_MPI_PREDICTION_ADVANCE");
+        data->prediction_advance = advance_env == nullptr ? 1 : atoi(advance_env);
+
+        auto const log_prediction_env = getenv("PYTHIA_MPI_LOG_PREDICTION");
+        data->log_prediction =  log_prediction_env != nullptr &&
+                                          strcmp(log_prediction_env, "YES") == 0;
+        data->estimation = init_estimation_from_start(data->grammar);
+
     }
-    get_data()->recursion_count = 0;
+
+    data->recursion_count = 0;
 }
 
 auto pythia_deinit() -> void {
-    if (get_data()->is_recording) {
-	if (get_data()->root != nullptr) {
-		if (get_data()->log)
-		    fprintf(stdout, "Export trace in file %s\n", get_data()->file_name);
-		auto file = std::ofstream { get_data()->file_name };
-		print_bin_file(get_data()->grammar, file, serialize);
+    auto const data = get_data();
+    if (data->is_recording) {
+	if (data->root != nullptr) {
+		if (data->log)
+		    fprintf(stdout, "Export trace in file %s\n", data->file_name);
+		auto file = std::ofstream { data->file_name };
+		print_bin_file(data->grammar, file, serialize);
 	}
-	else if (get_data()->log)
+	else if (data->log)
 		    fprintf(stdout, "No trace to export\n");
     }
-    if (get_data()->log)
+    else {
+        auto const succ = data->prediction_success_count;
+        auto const fail = data->prediction_failure_count;
+        auto const no = data->no_prediction_count;
+        auto const total = succ + fail + no;
+        auto const d_total = (double)total;
+        std::cout << "Predictions asked : " << total << std::endl;
+        std::cout << "Prediction success : " << succ << " (" << (double)succ / d_total << ")\n";
+        std::cout << "Prediction failure : " << fail << " (" << (double)fail / d_total << ")\n";
+        std::cout << "Prediction impossible : " << no << " (" << (double)no / d_total << ")\n";
+    }
+    if (data->log)
 	    fprintf(stdout, "Close Pythia\n");
 }
 
