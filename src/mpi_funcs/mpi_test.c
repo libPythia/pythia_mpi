@@ -25,7 +25,7 @@
 static int MPI_Test_core(MPI_Request* req,
 			 int* a,
 			 MPI_Status* s) {
-  pyhia_event(PythiaTest, 0, 0, 0);
+  pythia_event(PythiaTest, 0, 0, 0);
   return libMPI_Test(req, a, s);
 }
 
