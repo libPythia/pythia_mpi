@@ -15,6 +15,7 @@ enum Pythia_MPI_fn {
 #undef AUX
 
 void pythia_event(enum Pythia_MPI_fn fn, int arg1, int arg2, int arg3);
+int pythia_register_size();
 
 #ifdef __cplusplus
 }

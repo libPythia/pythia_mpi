@@ -31,9 +31,12 @@ static void MPI_Ireduce_scatter_prolog(CONST void* sendbuf  MAYBE_UNUSED,
                                        MPI_Op op  MAYBE_UNUSED,
                                        MPI_Comm comm MAYBE_UNUSED,
                                        MPI_Request* r MAYBE_UNUSED) {
-    int size;
-    MPI_Type_size(datatype, &size);
-    pythia_event(PythiaIreduce_scatter, *recvcnts * size, 0, 0);
+    int size = 0;
+    if (pythia_record_size()) {
+        MPI_Type_size(datatype, &size);
+        size *= recvcnts[0];
+    }
+    pythia_event(PythiaIreduce_scatter, size, 0, 0);
 }
 
 static int MPI_Ireduce_scatter_core(CONST void* sendbuf,

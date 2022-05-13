@@ -31,9 +31,12 @@ static void MPI_Sendrecv_replace_prolog(void* buf  MAYBE_UNUSED,
                                         int recvtag MAYBE_UNUSED,
                                         MPI_Comm comm MAYBE_UNUSED,
                                         MPI_Status* status MAYBE_UNUSED ) {
-    int size;
-    MPI_Type_size(type, &size);
-    pythia_event(PythiaSendrecv_replace, dest, sendtag, count * size);
+    int size = 0;
+    if (pythia_record_size()) {
+        MPI_Type_size(type, &size);
+        size *= count;
+    }
+    pythia_event(PythiaSendrecv_replace, dest, sendtag, size);
 }
 
 static int MPI_Sendrecv_replace_core(void* buf,

@@ -28,9 +28,12 @@ static void MPI_Rsend_prolog(CONST void* buf  MAYBE_UNUSED,
                              int dest MAYBE_UNUSED,
                              int tag MAYBE_UNUSED,
                              MPI_Comm comm MAYBE_UNUSED) {
-    int size;
-    MPI_Type_size(datatype, &size);
-    pythia_event(PythiaRsend, dest, tag, count * size);
+    int size = 0;
+    if (pythia_record_size()) {
+        MPI_Type_size(datatype, &size);
+        size *= count;
+    }
+    pythia_event(PythiaRsend, dest, tag, size);
 }
 
 static int MPI_Rsend_core(CONST void* buf,

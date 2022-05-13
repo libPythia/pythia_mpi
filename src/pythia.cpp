@@ -58,6 +58,7 @@ struct Data {
     std::atomic_int recursion_count = 1;
     bool is_recording = true;
     bool log = false;
+    bool register_size;
 
     int prediction_advance = 1;
     bool log_prediction = false;
@@ -176,6 +177,10 @@ auto pythia_event(Pythia_MPI_fn fn, int arg1, int arg2, int arg3) -> void {
     --data->recursion_count;
 }
 
+int pythia_register_size() {
+    return get_data()->register_size;
+}
+
 // -------------------------------------------------------------
 
 static auto serialize(Terminal const * t, std::ostream & os) -> void {
@@ -207,6 +212,9 @@ auto pythia_init(int world_rank) -> void {
     data->is_recording = mode_env == nullptr || strcmp(mode_env, "Predict") != 0;
     if (data->log)
         fprintf(stdout, data->is_recording ? "Pythia MPI recording\n" : "Pythia MPI predicting\n");
+
+    auto const register_size_env = getenv("PYTHIA_MPI_REGISTER_SIZES");
+    data->register_size = register_size_env != nullptr && strcmp(register_size_env, "YES") == 0;
 
     if (data->is_recording == false) {
         auto file = std::ifstream { data->file_name };

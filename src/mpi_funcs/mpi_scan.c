@@ -28,9 +28,12 @@ static void MPI_Scan_prolog(CONST void* sendbuf  MAYBE_UNUSED,
                             MPI_Datatype datatype MAYBE_UNUSED,
                             MPI_Op op  MAYBE_UNUSED,
                             MPI_Comm comm MAYBE_UNUSED) {
-    int size;
-    MPI_Type_size(datatype, &size);
-    pythia_event(PythiaScan, op, count * size, 0);
+    int size = 0;
+    if (pythia_record_size()) {
+        MPI_Type_size(datatype, &size);
+        size *= count;
+    }
+    pythia_event(PythiaScan, op, size, 0);
 }
 
 static int MPI_Scan_core(CONST void* sendbuf,

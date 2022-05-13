@@ -34,9 +34,12 @@ static void MPI_Iscatterv_prolog(CONST void* sendbuf  MAYBE_UNUSED,
                                  int root MAYBE_UNUSED,
                                  MPI_Comm comm MAYBE_UNUSED,
                                  MPI_Request* r MAYBE_UNUSED) {
-    int recvsize;
-    MPI_Type_size(recvtype, &recvsize);
-    pythia_event(PythiaIscatterv, root, recvcnt * recvsize, 0);
+    int size = 0;
+    if (pythia_record_size()) {
+        MPI_Type_size(recvtype, &size);
+        size *= recvcnt;
+    }
+    pythia_event(PythiaIscatterv, root, size, 0);
 }
 
 static int MPI_Iscatterv_core(CONST void* sendbuf,

@@ -32,9 +32,12 @@ static void MPI_Ireduce_prolog(CONST void* sendbuf  MAYBE_UNUSED,
                                int root MAYBE_UNUSED,
                                MPI_Comm comm MAYBE_UNUSED,
                                MPI_Request* r MAYBE_UNUSED) {
-    int size;
-    MPI_Type_size(datatype, &size);
-    pythia_event(PythiaIreduce, root, count * size, 0);
+    int size = 0;
+    if (pythia_record_size()) {
+        MPI_Type_size(datatype, &size);
+        size *= count;
+    }
+    pythia_event(PythiaIreduce, root, size, 0);
 }
 
 static int MPI_Ireduce_core(CONST void* sendbuf,

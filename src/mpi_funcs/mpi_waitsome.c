@@ -30,7 +30,7 @@ static void MPI_Waitsome_prolog(int incount MAYBE_UNUSED,
 				int* array_of_indices MAYBE_UNUSED,
 				MPI_Status* array_of_statuses MAYBE_UNUSED,
 				size_t size MAYBE_UNUSED) {
-    pythia_event(PythiaWaitsome, incount, *outcount, 0);
+    pythia_event(PythiaWaitsome, incount, 0, 0);
 }
 
 static int MPI_Waitsome_core(int incount,
