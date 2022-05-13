@@ -118,9 +118,9 @@ static auto record_event(Pythia_MPI_fn fn, Terminal * terminal) -> void {
             } else {
                 auto i = 1;
 
-                for (auto i = 1; i < data->prediction_advance; ++i) {
-                    if (get_first_next(&prediction) == 0) {
-                        i = 0;
+                for (i = 1; i < data->prediction_advance; ++i) {
+                    if (get_first_next(&prediction) == false) {
+                        i = -1;
                         break;
                     }
                 }
@@ -140,20 +140,12 @@ static auto record_event(Pythia_MPI_fn fn, Terminal * terminal) -> void {
             if (prediction.event_id == data->event_id) {
                 if (terminal == nullptr) {
                     ++data->prediction_failure_count;
-                    printf("%lu: NULLPTR\n", data->world_rank);
                 } else {
                     auto const payload = (Payload const *)terminal->payload;
                     if (*prediction.payload == *payload) {
                         ++data->prediction_success_count;
-                        printf("%lu: OUAIS\n", data->world_rank);
                     } else {
                         ++data->prediction_failure_count;
-                        std::cout << data->world_rank
-                                  << ": RATE : "
-                                  << pythia_MPI_fn_name(prediction.payload->fn)
-                                  << " expected, got "
-                                  << pythia_MPI_fn_name(payload->fn)
-                                  << std::endl;
                     }
                 }
                 data->prediction_test.pop_front();

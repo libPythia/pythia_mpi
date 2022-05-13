@@ -17,6 +17,8 @@ add_library(mpi_pythia SHARED
 )
 
 target_link_libraries(mpi_pythia
+  PUBLIC
+    eta_factorizer
   PRIVATE
     ${MPI_CXX_LIBRARIES}
 )
