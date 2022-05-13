@@ -177,7 +177,7 @@ auto pythia_event(Pythia_MPI_fn fn, int arg1, int arg2, int arg3) -> void {
     --data->recursion_count;
 }
 
-int pythia_register_size() {
+int pythia_record_size() {
     return get_data()->register_size;
 }
 
