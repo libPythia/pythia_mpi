@@ -72,6 +72,8 @@ struct Data {
     NonTerminal * root = nullptr;
 
     char file_name[1024];
+
+    bool initialized = false;
 };
 
 static auto get_data() -> Data * {
@@ -104,6 +106,8 @@ auto operator==(Payload const & lhs, Payload const & rhs) -> bool {
 
 static auto record_event(Pythia_MPI_fn fn, Terminal * terminal) -> void {
     auto const data = get_data();
+    if (data->initialized == false)
+	    return;
 
     ++data->event_id;
 
@@ -237,6 +241,7 @@ auto pythia_init(int world_rank) -> void {
 
     }
 
+    data->initialized = true;
     data->recursion_count = 0;
 }
 
