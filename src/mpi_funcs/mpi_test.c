@@ -20,12 +20,9 @@
 #include <sys/timeb.h>
 #include <unistd.h>
 
-#include "../pythia.h"
-
 static int MPI_Test_core(MPI_Request* req,
 			 int* a,
 			 MPI_Status* s) {
-  pythia_event(PythiaTest, 0, 0, 0);
   return libMPI_Test(req, a, s);
 }
 
