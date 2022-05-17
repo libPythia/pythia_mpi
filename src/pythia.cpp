@@ -118,7 +118,7 @@ static auto timespec_diff(timespec a, timespec b) -> timespec {
 
 static auto compute_duration_ms(timespec const & start) -> size_t {
     timespec stop, result;
-    timespec_get(&stop, TIME_UTC);
+    clock_gettime(CLOCK_MONOTONIC, &stop);
     auto const diff = timespec_diff(stop, start);
     assert(diff.tv_sec == 0);
     return diff.tv_nsec;
@@ -147,7 +147,7 @@ static auto record_event(Pythia_MPI_fn fn, Terminal * terminal) -> void {
 
         if (trigger_prediction(fn)) {
             timespec start;
-            timespec_get(&start, TIME_UTC);
+            clock_gettime(CLOCK_MONOTONIC, &start);
             auto prediction = get_prediction_from_estimation(data->estimation);
             if (prediction.infos.size() == 0) {
                 update_prediction_statistics(&data->no_prediction, compute_duration_ms(start));
