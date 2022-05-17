@@ -1,19 +1,19 @@
 #include "pythia.h"
 
 #include <stdlib.h>
+#include <time.h>
 
-#include <iostream>
 #include <array>
-#include <list>
 #include <atomic>
 #include <cassert>
 #include <cstdio>
 #include <cstring>
 #include <eta/factorization/bin_file.hpp>
-#include <eta/factorization/reduction.hpp>
 #include <eta/factorization/prediction.hpp>
+#include <eta/factorization/reduction.hpp>
 #include <fstream>
 #include <iostream>
+#include <list>
 #include <tuple>
 #include <unordered_map>
 
@@ -40,10 +40,17 @@ struct Payload {
     int arg3;
 };
 
-
 struct PredictionTest {
     size_t event_id;
     Payload const * payload;
+    size_t duration;
+};
+
+struct PredictionStatistics {
+    size_t count = 0;
+    size_t min_duration = 0;
+    size_t max_duration = 0;
+    size_t total_duration = 0;
 };
 
 struct Data {
@@ -64,14 +71,15 @@ struct Data {
     bool log_prediction = false;
     Estimation estimation;
     std::list<PredictionTest> prediction_test;
-    size_t prediction_success_count = 0u;
-    size_t prediction_failure_count = 0u;
-    size_t no_prediction_count = 0u;
+    PredictionStatistics prediction_success;
+    PredictionStatistics prediction_failure;
+    PredictionStatistics no_prediction;
 
     Grammar grammar;
     NonTerminal * root = nullptr;
 
     char file_name[1024];
+    char stats_file_name[1024];
 
     bool initialized = false;
 };
@@ -97,11 +105,32 @@ static auto trigger_prediction(Pythia_MPI_fn fn) -> bool {
 #undef AUX
 }
 
-auto operator==(Payload const & lhs, Payload const & rhs) -> bool {
-    return lhs.fn == rhs.fn &&
-        lhs.arg1 == rhs.arg1 &&
-        lhs.arg2 == rhs.arg2 &&
-        lhs.arg3 == rhs.arg3;
+static auto timespec_diff(timespec a, timespec b) -> timespec {
+    timespec result;
+    result.tv_sec  = a.tv_sec  - b.tv_sec;
+    result.tv_nsec = a.tv_nsec - b.tv_nsec;
+    if (result.tv_nsec < 0) {
+        --result.tv_sec;
+        result.tv_nsec += 1000000000L;
+    }
+    return result;
+}
+
+static auto compute_duration_ms(timespec const & start) -> size_t {
+    timespec stop, result;
+    timespec_get(&stop, TIME_UTC);
+    auto const diff = timespec_diff(stop, start);
+    assert(diff.tv_sec == 0);
+    return diff.tv_nsec;
+}
+
+static auto update_prediction_statistics(PredictionStatistics * stats, size_t duration_ns) {
+    if (stats->count == 0 || duration_ns < stats->min_duration)
+        stats->min_duration = duration_ns;
+    if (stats->count == 0 || duration_ns > stats->max_duration)
+        stats->max_duration= duration_ns;
+    stats->total_duration += duration_ns;
+    ++stats->count;
 }
 
 static auto record_event(Pythia_MPI_fn fn, Terminal * terminal) -> void {
@@ -117,9 +146,11 @@ static auto record_event(Pythia_MPI_fn fn, Terminal * terminal) -> void {
         data->estimation = next_estimation(std::move(data->estimation), terminal);
 
         if (trigger_prediction(fn)) {
+            timespec start;
+            timespec_get(&start, TIME_UTC);
             auto prediction = get_prediction_from_estimation(data->estimation);
             if (prediction.infos.size() == 0) {
-                ++data->no_prediction_count;
+                update_prediction_statistics(&data->no_prediction, compute_duration_ms(start));
             } else {
                 auto i = 1;
 
@@ -131,11 +162,15 @@ static auto record_event(Pythia_MPI_fn fn, Terminal * terminal) -> void {
                 }
 
                 if (i != data->prediction_advance) {
-                    ++data->no_prediction_count;
+                    update_prediction_statistics(&data->no_prediction, compute_duration_ms(start));
                 } else {
-                    auto const predicted_event = (Payload const *)get_terminal(prediction)->payload;
-                    data->prediction_test.push_back({ data->event_id + data->prediction_advance,
-                            predicted_event });
+                    auto const predicted_event =
+                        (Payload const *)get_terminal(prediction)->payload;
+                    data->prediction_test.push_back( {
+                        data->event_id + data->prediction_advance,
+                        predicted_event,
+                        compute_duration_ms(start)
+                    });
                 }
             }
         }
@@ -144,13 +179,13 @@ static auto record_event(Pythia_MPI_fn fn, Terminal * terminal) -> void {
             auto const prediction = data->prediction_test.front();
             if (prediction.event_id == data->event_id) {
                 if (terminal == nullptr) {
-                    ++data->prediction_failure_count;
+                    update_prediction_statistics(&data->prediction_failure, prediction.duration);
                 } else {
                     auto const payload = (Payload const *)terminal->payload;
-                    if (*prediction.payload == *payload) {
-                        ++data->prediction_success_count;
+                    if (prediction.payload == payload) {
+                        update_prediction_statistics(&data->prediction_success, prediction.duration);
                     } else {
-                        ++data->prediction_failure_count;
+                        update_prediction_statistics(&data->prediction_failure, prediction.duration);
                     }
                 }
                 data->prediction_test.pop_front();
@@ -208,6 +243,7 @@ auto pythia_init(int world_rank) -> void {
     data->world_rank = world_rank;
 
     sprintf(data->file_name, "pythia_MPI_%d.btr", world_rank);
+    sprintf(data->stats_file_name, "preditions_%d.stats", world_rank);
 
     auto const log_env = getenv("PYTHIA_MPI_LOG");
     data->log = (log_env != nullptr && strcmp(log_env, "YES") == 0);
@@ -248,28 +284,26 @@ auto pythia_init(int world_rank) -> void {
 auto pythia_deinit() -> void {
     auto const data = get_data();
     if (data->is_recording) {
-	if (data->root != nullptr) {
-		if (data->log)
-		    fprintf(stdout, "Export trace in file %s\n", data->file_name);
-		auto file = std::ofstream { data->file_name };
-		print_bin_file(data->grammar, file, serialize);
-	}
-	else if (data->log)
-		    fprintf(stdout, "No trace to export\n");
-    }
-    else {
-        auto const succ = data->prediction_success_count;
-        auto const fail = data->prediction_failure_count;
-        auto const no = data->no_prediction_count;
-        auto const total = succ + fail + no;
-        auto const d_total = (double)total;
-        std::cout << "Predictions asked : " << total << std::endl;
-        std::cout << "Prediction success : " << succ << " (" << (double)succ / d_total << ")\n";
-        std::cout << "Prediction failure : " << fail << " (" << (double)fail / d_total << ")\n";
-        std::cout << "Prediction impossible : " << no << " (" << (double)no / d_total << ")\n";
+        if (data->root != nullptr) {
+            if (data->log)
+                fprintf(stdout, "Export trace in file %s\n", data->file_name);
+            auto file = std::ofstream{data->file_name};
+            print_bin_file(data->grammar, file, serialize);
+        } else if (data->log)
+            fprintf(stdout, "No trace to export\n");
+    } else {
+        auto const succ = data->prediction_success;;
+        auto const fail = data->prediction_failure;
+        auto const no = data->no_prediction;
+        auto f = fopen(data->stats_file_name, "w");
+        fprintf(f, "type,count,min,max,total\n");
+        fprintf(f, "success,%ld,%ld,%ld,%ld\n",succ.count, succ.min_duration, succ.max_duration, succ.total_duration);
+        fprintf(f, "impossible,%ld,%ld,%ld,%ld\n",no.count, no.min_duration, no.max_duration, no.total_duration);
+        fprintf(f, "failure,%ld,%ld,%ld,%ld\n",fail.count, fail.min_duration, fail.max_duration, fail.total_duration);
+        fclose(f);
     }
     if (data->log)
-	    fprintf(stdout, "Close Pythia\n");
+        fprintf(stdout, "Close Pythia\n");
 }
 
 } // extern "C"
