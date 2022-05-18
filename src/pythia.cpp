@@ -57,7 +57,7 @@ struct Data {
     struct Event {
         std::unordered_map<std::tuple<int, int, int>, Terminal *, tuple_hash> terminals;
     };
-    std::array<Event, (int)Pythia_MPI_fn::COUNT - 1> events;
+    std::array<Event, (int)Pythia_MPI_fn::COUNT> events;
 
     size_t event_id = 0;
     size_t world_rank;
@@ -135,9 +135,6 @@ static auto update_prediction_statistics(PredictionStatistics * stats, size_t du
 
 static auto record_event(Pythia_MPI_fn fn, Terminal * terminal) -> void {
     auto const data = get_data();
-    if (data->initialized == false)
-	    return;
-
     ++data->event_id;
 
     if (data->is_recording) {
@@ -198,6 +195,9 @@ extern "C" {
 
 auto pythia_event(Pythia_MPI_fn fn, int arg1, int arg2, int arg3) -> void {
     auto const data = get_data();
+    if (data->initialized == false)
+	    return;
+
     if (++data->recursion_count == 1) {
         if (data->log)
             fprintf(stdout, "%lu: Pythia raised event %s with args %d, %d, %d\n", data->world_rank, pythia_MPI_fn_name(fn), arg1, arg2, arg3);
@@ -283,6 +283,7 @@ auto pythia_init(int world_rank) -> void {
 
 auto pythia_deinit() -> void {
     auto const data = get_data();
+    data->initialized = false;
     if (data->is_recording) {
         if (data->root != nullptr) {
             if (data->log)

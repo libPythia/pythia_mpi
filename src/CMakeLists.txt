@@ -14,7 +14,6 @@ target_include_directories(mpi-interceptor-bin
 
 add_library(mpi_pythia SHARED
   pythia.cpp
-  openMP.c
 )
 
 target_link_libraries(mpi_pythia
@@ -31,6 +30,7 @@ add_library(mpi-interceptor SHARED
   fortran_utils.f90
   mpi_f.f90
   mpi_fortran.c
+  openMP.c
 )
 
 target_include_directories(mpi-interceptor

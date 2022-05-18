@@ -10,6 +10,7 @@
 // Extra definitions
 
 // Pointers on intercepted fonctions
+
 void GOMP_atomic_enter() {
     pythia_event(PythiaGOMP_atomic_enter, 0, 0, 0);
 
@@ -205,12 +206,13 @@ void GOMP_single_copy_end(void* arg0) {
 
     orig_GOMP_single_copy_end(arg0);
 }
-void GOMP_parallel() {
+void GOMP_parallel (void (*fn) (void *), void *data, unsigned num_threads, unsigned int flags) {
     pythia_event(PythiaGOMP_parallel, 0, 0, 0);
 
-    static void (*orig_GOMP_parallel)(void) = 0;
+    static void (*orig_GOMP_parallel)(void (*) (void *), void *, unsigned, unsigned int) = 0;
     if (orig_GOMP_parallel == 0)
-        orig_GOMP_parallel = (void(*)(void)) dlsym(RTLD_NEXT, "GOMP_parallel");
+        orig_GOMP_parallel = (void(*)(void (*) (void *), void *, unsigned, unsigned int)) dlsym(RTLD_NEXT, "GOMP_parallel");
 
-    orig_GOMP_parallel();
+    orig_GOMP_parallel(fn, data, num_threads, flags);
 }
+
