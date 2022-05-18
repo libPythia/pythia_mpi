@@ -14,6 +14,7 @@ target_include_directories(mpi-interceptor-bin
 
 add_library(mpi_pythia SHARED
   pythia.cpp
+  openMP.c
 )
 
 target_link_libraries(mpi_pythia
