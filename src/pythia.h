@@ -17,6 +17,8 @@ enum Pythia_MPI_fn {
 void pythia_event(enum Pythia_MPI_fn fn, int arg1, int arg2, int arg3);
 int pythia_record_size();
 
+void notify_thread_existance(void);
+
 #ifdef __cplusplus
 }
 #endif

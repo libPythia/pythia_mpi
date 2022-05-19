@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <time.h>
+#include <dlfcn.h>
 
 #include <array>
 #include <atomic>
@@ -53,22 +54,15 @@ struct PredictionStatistics {
     size_t total_duration = 0;
 };
 
-struct Data {
+struct Trace {
     struct Event {
         std::unordered_map<std::tuple<int, int, int>, Terminal *, tuple_hash> terminals;
     };
+
     std::array<Event, (int)Pythia_MPI_fn::COUNT> events;
-
     size_t event_id = 0;
-    size_t world_rank;
+    std::atomic_int recursion_count { 1 };
 
-    std::atomic_int recursion_count = 1;
-    bool is_recording = true;
-    bool log = false;
-    bool register_size;
-
-    int prediction_advance = 1;
-    bool log_prediction = false;
     Estimation estimation;
     std::list<PredictionTest> prediction_test;
     PredictionStatistics prediction_success;
@@ -79,14 +73,39 @@ struct Data {
     NonTerminal * root = nullptr;
 
     char file_name[1024];
+};
+
+struct Data {
+    size_t world_rank;
+
+    bool is_recording = true;
+    bool log = false;
+    bool register_size;
+
+    int prediction_advance = 1;
+    bool log_prediction = false;
     char stats_file_name[1024];
+    char thread_count_file_name[1024];
 
     bool initialized = false;
+
+    std::array<Trace, 64> traces;
+    std::atomic_size_t thread_count { 0 };
+
 };
 
 static auto get_data() -> Data * {
 	static auto d = new Data;
 	return d;
+}
+
+static auto get_thread_id() -> size_t {
+    static thread_local auto thread_id = get_data()->thread_count++;
+    return thread_id;
+}
+
+static auto get_trace(Data * data) -> Trace * {
+    return &data->traces[get_thread_id()];
 }
 
 // -------------------------------------------------------------
@@ -135,19 +154,20 @@ static auto update_prediction_statistics(PredictionStatistics * stats, size_t du
 
 static auto record_event(Pythia_MPI_fn fn, Terminal * terminal) -> void {
     auto const data = get_data();
-    ++data->event_id;
+    auto const trace = get_trace(data);
+    ++trace->event_id;
 
     if (data->is_recording) {
-        data->root = insertSymbol(data->grammar, data->root, terminal);
+        trace->root = insertSymbol(trace->grammar, trace->root, terminal);
     } else {
-        data->estimation = next_estimation(std::move(data->estimation), terminal);
+        trace->estimation = next_estimation(std::move(trace->estimation), terminal);
 
         if (trigger_prediction(fn)) {
             timespec start;
             clock_gettime(CLOCK_MONOTONIC, &start);
-            auto prediction = get_prediction_from_estimation(data->estimation);
+            auto prediction = get_prediction_from_estimation(trace->estimation);
             if (prediction.infos.size() == 0) {
-                update_prediction_statistics(&data->no_prediction, compute_duration_ms(start));
+                update_prediction_statistics(&trace->no_prediction, compute_duration_ms(start));
             } else {
                 auto i = 1;
 
@@ -159,12 +179,12 @@ static auto record_event(Pythia_MPI_fn fn, Terminal * terminal) -> void {
                 }
 
                 if (i != data->prediction_advance) {
-                    update_prediction_statistics(&data->no_prediction, compute_duration_ms(start));
+                    update_prediction_statistics(&trace->no_prediction, compute_duration_ms(start));
                 } else {
                     auto const predicted_event =
                         (Payload const *)get_terminal(prediction)->payload;
-                    data->prediction_test.push_back( {
-                        data->event_id + data->prediction_advance,
+                    trace->prediction_test.push_back( {
+                        trace->event_id + data->prediction_advance,
                         predicted_event,
                         compute_duration_ms(start)
                     });
@@ -172,20 +192,20 @@ static auto record_event(Pythia_MPI_fn fn, Terminal * terminal) -> void {
             }
         }
 
-        if (data->prediction_test.size() > 0) {
-            auto const prediction = data->prediction_test.front();
-            if (prediction.event_id == data->event_id) {
+        if (trace->prediction_test.size() > 0) {
+            auto const prediction = trace->prediction_test.front();
+            if (prediction.event_id == trace->event_id) {
                 if (terminal == nullptr) {
-                    update_prediction_statistics(&data->prediction_failure, prediction.duration);
+                    update_prediction_statistics(&trace->prediction_failure, prediction.duration);
                 } else {
                     auto const payload = (Payload const *)terminal->payload;
                     if (prediction.payload == payload) {
-                        update_prediction_statistics(&data->prediction_success, prediction.duration);
+                        update_prediction_statistics(&trace->prediction_success, prediction.duration);
                     } else {
-                        update_prediction_statistics(&data->prediction_failure, prediction.duration);
+                        update_prediction_statistics(&trace->prediction_failure, prediction.duration);
                     }
                 }
-                data->prediction_test.pop_front();
+                trace->prediction_test.pop_front();
             }
         }
     }
@@ -198,22 +218,23 @@ auto pythia_event(Pythia_MPI_fn fn, int arg1, int arg2, int arg3) -> void {
     if (data->initialized == false)
 	    return;
 
-    if (++data->recursion_count == 1) {
+    auto const trace = get_trace(data);
+    if (++trace->recursion_count == 1) {
         if (data->log)
             fprintf(stdout, "%lu: Pythia raised event %s with args %d, %d, %d\n", data->world_rank, pythia_MPI_fn_name(fn), arg1, arg2, arg3);
 
         auto const terminal = [&]() -> Terminal * {
             auto const [it, inserted] =
-                    data->events[(int)fn].terminals.try_emplace({ arg1, arg2, arg3 }, nullptr);
+                    trace->events[(int)fn].terminals.try_emplace({ arg1, arg2, arg3 }, nullptr);
             if (inserted && data->is_recording) {
-                it->second = new_terminal(data->grammar, new Payload { fn, arg1, arg2, arg3 });
+                it->second = new_terminal(trace->grammar, new Payload { fn, arg1, arg2, arg3 });
             }
             return it->second;
         }();
 
         record_event(fn, terminal);
     }
-    --data->recursion_count;
+    --trace->recursion_count;
 }
 
 int pythia_record_size() {
@@ -242,8 +263,10 @@ auto pythia_init(int world_rank) -> void {
     auto const data = get_data();
     data->world_rank = world_rank;
 
-    sprintf(data->file_name, "pythia_MPI_%d.btr", world_rank);
+    for (auto i = 0u; i < data->traces.size(); ++i)
+        sprintf(data->traces[i].file_name, "pythia_MPI_%d_%u.btr", world_rank, i);
     sprintf(data->stats_file_name, "preditions_%d.stats", world_rank);
+    sprintf(data->thread_count_file_name, "thread_count_%d.txt", world_rank);
 
     auto const log_env = getenv("PYTHIA_MPI_LOG");
     data->log = (log_env != nullptr && strcmp(log_env, "YES") == 0);
@@ -257,54 +280,96 @@ auto pythia_init(int world_rank) -> void {
     data->register_size = register_size_env != nullptr && strcmp(register_size_env, "YES") == 0;
 
     if (data->is_recording == false) {
-        auto file = std::ifstream { data->file_name };
-        if (data->log)
-            fprintf(stdout, "Load trace from file %s\n", data->file_name);
-        load_bin_file(data->grammar, file, deserialize);
+        // Load thread count
+        data->thread_count = [&]() {
+            auto file = std::ifstream { data->thread_count_file_name };
+            auto res = 0u;
+            file >> res;
+            return res;
+        }();
 
-        for (auto & terminal : data->grammar.terminals) {
-            auto const p = (Payload const *)terminal->payload;
-            data->events[(int)p->fn].terminals[{ p->arg1, p->arg2, p->arg3}] = terminal.get();
-        }
+        auto const log_prediction_env = getenv("PYTHIA_MPI_LOG_PREDICTION");
+        data->log_prediction =  log_prediction_env != nullptr &&
+            strcmp(log_prediction_env, "YES") == 0;
 
         auto const advance_env = getenv("PYTHIA_MPI_PREDICTION_ADVANCE");
         data->prediction_advance = advance_env == nullptr ? 1 : atoi(advance_env);
 
-        auto const log_prediction_env = getenv("PYTHIA_MPI_LOG_PREDICTION");
-        data->log_prediction =  log_prediction_env != nullptr &&
-                                          strcmp(log_prediction_env, "YES") == 0;
-        data->estimation = init_estimation_from_start(data->grammar);
+        for (auto i = 0u; i < data->thread_count; ++i) {
+            auto const trace = &data->traces[i];
+            auto file = std::ifstream { trace->file_name };
+            if (data->log)
+                fprintf(stdout, "Load trace from file %s\n", trace->file_name);
+            load_bin_file(trace->grammar, file, deserialize);
 
+            for (auto & terminal : trace->grammar.terminals) {
+                auto const p = (Payload const *)terminal->payload;
+                trace->events[(int)p->fn].terminals[{ p->arg1, p->arg2, p->arg3}] = terminal.get();
+            }
+
+            trace->estimation = init_estimation_from_start(trace->grammar);
+        }
     }
 
+    for (auto & trace : data->traces)
+        trace.recursion_count = 0;
     data->initialized = true;
-    data->recursion_count = 0;
 }
 
 auto pythia_deinit() -> void {
     auto const data = get_data();
     data->initialized = false;
     if (data->is_recording) {
-        if (data->root != nullptr) {
-            if (data->log)
-                fprintf(stdout, "Export trace in file %s\n", data->file_name);
-            auto file = std::ofstream{data->file_name};
-            print_bin_file(data->grammar, file, serialize);
-        } else if (data->log)
-            fprintf(stdout, "No trace to export\n");
+        for (auto i = 0u; i < data->thread_count; ++i) {
+            auto const trace = &data->traces[i];
+            if (trace->root != nullptr) {
+                if (data->log)
+                    fprintf(stdout, "Export trace in file %s\n", trace->file_name);
+                auto file = std::ofstream { trace->file_name };
+                print_bin_file(trace->grammar, file, serialize);
+            }
+        }
     } else {
-        auto const succ = data->prediction_success;;
-        auto const fail = data->prediction_failure;
-        auto const no = data->no_prediction;
         auto f = fopen(data->stats_file_name, "w");
         fprintf(f, "type,count,min,max,total\n");
-        fprintf(f, "success,%ld,%ld,%ld,%ld\n",succ.count, succ.min_duration, succ.max_duration, succ.total_duration);
-        fprintf(f, "impossible,%ld,%ld,%ld,%ld\n",no.count, no.min_duration, no.max_duration, no.total_duration);
-        fprintf(f, "failure,%ld,%ld,%ld,%ld\n",fail.count, fail.min_duration, fail.max_duration, fail.total_duration);
+        for (auto i = 0; i < data->thread_count; ++i) {
+            auto const trace = &data->traces[i];
+            auto const succ = trace->prediction_success;
+            auto const fail = trace->prediction_failure;
+            auto const no = trace->no_prediction;
+            fprintf(f, "success,%ld,%ld,%ld,%ld\n",succ.count, succ.min_duration, succ.max_duration, succ.total_duration);
+            fprintf(f, "impossible,%ld,%ld,%ld,%ld\n",no.count, no.min_duration, no.max_duration, no.total_duration);
+            fprintf(f, "failure,%ld,%ld,%ld,%ld\n",fail.count, fail.min_duration, fail.max_duration, fail.total_duration);
+        }
         fclose(f);
     }
     if (data->log)
         fprintf(stdout, "Close Pythia\n");
+}
+
+struct NewThreadInfos {
+    void * (*start_routine)(void *);
+    void * arg;
+};
+
+static auto new_start_routine(void * arg) -> void * {
+    auto const ptr = static_cast<NewThreadInfos *>(arg);
+    auto const thread_infos = *ptr;
+    delete ptr;
+    get_thread_id(); // Associate id now
+    return thread_infos.start_routine(thread_infos.arg);
+}
+
+int pthread_create(pthread_t * thread,
+                   pthread_attr_t const * attr,
+                   void * (*start_routine)(void *),
+                   void * arg) {
+    get_thread_id(); // insure this thread is registered (usefull for main thread)
+
+    static int (*orig)(pthread_t *, pthread_attr_t const *, void * (*)(void *), void *) = 0;
+    if (orig == 0)
+        orig = (int (*)(pthread_t *, pthread_attr_t const *, void * (*)(void *), void *) ) dlsym(RTLD_NEXT, "pthread_create");
+    return orig(thread, attr, new_start_routine, new NewThreadInfos { start_routine, arg });
 }
 
 } // extern "C"
