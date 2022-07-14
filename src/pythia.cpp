@@ -273,8 +273,7 @@ auto pythia_init(int world_rank) -> void {
 
     auto const mode_env = getenv("PYTHIA_MPI");
     data->is_recording = mode_env == nullptr || strcmp(mode_env, "Predict") != 0;
-    if (data->log)
-        fprintf(stdout, data->is_recording ? "Pythia MPI recording\n" : "Pythia MPI predicting\n");
+    fprintf(stdout, data->is_recording ? "Pythia MPI recording\n" : "Pythia MPI predicting\n");
 
     auto const register_size_env = getenv("PYTHIA_MPI_REGISTER_SIZES");
     data->register_size = register_size_env != nullptr && strcmp(register_size_env, "YES") == 0;
